@@ -4,7 +4,9 @@ import { getOrCreateDefaultOrg } from "@/lib/org";
 import OpenAI from "openai";
 import pdfParse from "pdf-parse";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-build-placeholder" });
+}
 
 function chunkText(text: string, size = 1000, overlap = 200): string[] {
   const chunks: string[] = [];
@@ -34,6 +36,7 @@ export async function POST(request: Request) {
   });
 
   const chunks = chunkText(text);
+  const openai = getOpenAI();
   for (const chunk of chunks) {
     const emb = await openai.embeddings.create({ model: "text-embedding-3-small", input: chunk });
     const vector = emb.data[0].embedding;

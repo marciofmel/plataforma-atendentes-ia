@@ -3,7 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDefaultOrg } from "@/lib/org";
 import OpenAI from "openai";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+function getOpenAI() {
+  return new OpenAI({ apiKey: process.env.OPENAI_API_KEY || "sk-build-placeholder" });
+}
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
@@ -17,6 +19,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
+  const openai = getOpenAI();
   const body = await request.json().catch(() => ({}));
   const org = await getOrCreateDefaultOrg();
   const entries = body?.entry ?? [];
