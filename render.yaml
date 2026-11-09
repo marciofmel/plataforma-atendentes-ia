@@ -20,5 +20,3 @@ databases:
   - name: plataforma-atendentes-db
     plan: free
     region: virginia
-    version: 16
-    diskSizeGb: 1
