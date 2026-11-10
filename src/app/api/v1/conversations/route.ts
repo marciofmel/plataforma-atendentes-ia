@@ -22,3 +22,16 @@ export async function GET(request: Request) {
   });
   return NextResponse.json({ conversations });
 }
+
+export async function DELETE(request: Request) {
+  const org = await getOrCreateDefaultOrg();
+  const url = new URL(request.url);
+  const id = url.searchParams.get("id");
+  if (!id) return NextResponse.json({ error: "Informe o id da conversa." }, { status: 400 });
+
+  const conv = await prisma.conversation.findFirst({ where: { id, organizationId: org.id } });
+  if (!conv) return NextResponse.json({ error: "Conversa não encontrada." }, { status: 404 });
+
+  await prisma.conversation.delete({ where: { id } });
+  return NextResponse.json({ ok: true });
+}
