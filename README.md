@@ -27,4 +27,16 @@ Acesse: `http://localhost:3011/login`
 - `DATABASE_URL` (automática via Render Postgres)
 - `NEXTAUTH_SECRET` (gerada)
 - `NEXTAUTH_URL` (URL pública)
-- `OPENAI_API_KEY`, `GROQ_API_KEY`, `META_WHATSAPP_*`, `VAPI_API_KEY` — configuráveis no painel visual `/admin/settings`
+- `OPENAI_API_KEY`, `GROQ_API_KEY`, `VAPI_API_KEY` — **opcionais**, configuráveis no painel visual `/admin/settings`
+
+## WhatsApp
+O painel `/admin/whatsapp` conecta o número por **QR Code** com Evolution API ou Z-API
+(sem portfólio da Meta) ou pelo WhatsApp Cloud API oficial.
+Veja o guia completo em [`docs/whatsapp-sem-portfolio.md`](docs/whatsapp-sem-portfolio.md).
+
+Webhooks:
+- `/api/v1/webhooks/whatsapp` (Meta)
+- `/api/v1/webhooks/evolution` (Evolution API)
+- `/api/v1/webhooks/zapi` (Z-API)
+- `/api/v1/webhooks/vapi` (voz)
+
