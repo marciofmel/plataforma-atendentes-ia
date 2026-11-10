@@ -11,6 +11,8 @@ services:
         value: 20.x
       - key: NEXTAUTH_SECRET
         generateValue: true
+      - key: NEXTAUTH_URL
+        value: https://plataforma-atendentes-ia-mzxw.onrender.com
       - key: DATABASE_URL
         fromDatabase:
           name: plataforma-atendentes-db

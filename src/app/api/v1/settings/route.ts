@@ -1,33 +1,23 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
-import { getOrCreateDefaultOrg } from "@/lib/org";
+import { getSettings, saveSettings } from "@/lib/settings";
 import { z } from "zod";
 
-const settingsSchema = z.object({
-  openai_api_key: z.string().optional(),
-  meta_whatsapp_token: z.string().optional(),
-  meta_whatsapp_phone_number_id: z.string().optional(),
-  meta_whatsapp_verify_token: z.string().optional(),
-  vapi_api_key: z.string().optional(),
-  groq_api_key: z.string().optional(),
-});
+export const dynamic = "force-dynamic";
+
+// Aceita qualquer par chave/valor textual (todas as integrações são configuradas pelo painel).
+const settingsSchema = z.record(z.string());
 
 export async function GET() {
-  const org = await getOrCreateDefaultOrg();
-  const settings = JSON.parse(org.settings || "{}");
+  const settings = await getSettings();
   return NextResponse.json({ settings });
 }
 
 export async function POST(request: Request) {
-  const org = await getOrCreateDefaultOrg();
   const body = await request.json().catch(() => ({}));
   const parsed = settingsSchema.safeParse(body);
-  if (!parsed.success) return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
-  const current = JSON.parse(org.settings || "{}");
-  const merged = { ...current, ...parsed.data };
-  await prisma.organization.update({
-    where: { id: org.id },
-    data: { settings: JSON.stringify(merged) },
-  });
-  return NextResponse.json({ ok: true });
+  if (!parsed.success) {
+    return NextResponse.json({ error: parsed.error.flatten() }, { status: 400 });
+  }
+  const merged = await saveSettings(parsed.data);
+  return NextResponse.json({ ok: true, settings: merged });
 }

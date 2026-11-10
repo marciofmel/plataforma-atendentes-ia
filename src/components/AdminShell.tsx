@@ -7,7 +7,7 @@ import { signOut, useSession } from "next-auth/react";
 import {
   LayoutDashboard, Bot, FlaskConical, BookOpen, MessageSquare,
   Calendar, UserCheck, CreditCard, Settings, Sun, Moon, Menu, X,
-  ChevronRight
+  ChevronRight, Smartphone
 } from "lucide-react";
 
 const NAV = [
@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/admin/playground", label: "Playground", icon: FlaskConical },
   { href: "/admin/knowledge", label: "Conhecimento", icon: BookOpen },
+  { href: "/admin/whatsapp", label: "WhatsApp", icon: Smartphone },
   { href: "/admin/conversations", label: "Conversas", icon: MessageSquare },
   { href: "/admin/appointments", label: "Agendamentos", icon: Calendar },
   { href: "/admin/handovers", label: "Handover", icon: UserCheck },

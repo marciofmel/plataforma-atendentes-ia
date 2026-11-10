@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateDefaultOrg } from "@/lib/org";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(request: Request) {
   const org = await getOrCreateDefaultOrg();
   const url = new URL(request.url);

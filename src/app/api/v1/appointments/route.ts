@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDefaultOrg } from "@/lib/org";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const schema = z.object({
   title: z.string().min(1),
   description: z.string().optional(),

@@ -3,6 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { getOrCreateDefaultOrg } from "@/lib/org";
 import { z } from "zod";
 
+export const dynamic = "force-dynamic";
+
 const agentSchema = z.object({
   name: z.string().min(1),
   system_prompt: z.string().default(""),
