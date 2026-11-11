@@ -121,6 +121,32 @@ export default function SettingsPage() {
         </button>
       </section>
 
+      <section className="glass-panel rounded-xl p-4 md:p-5 space-y-3">
+        <h2 className="text-sm font-semibold text-slate-200">Modelo de IA (Groq)</h2>
+        <p className="text-[11px] text-slate-400">
+          A Groq descontinua modelos com frequência. A plataforma tenta automaticamente os modelos
+          disponíveis em sequência, então o atendimento não para. Você pode escolher o preferido abaixo.
+        </p>
+        <select
+          value={values.groq_model ?? "openai/gpt-oss-120b"}
+          onChange={(e) => setValues({ ...values, groq_model: e.target.value })}
+          className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 focus:border-purple-500 focus:outline-none"
+        >
+          <option value="openai/gpt-oss-120b">openai/gpt-oss-120b (melhor qualidade)</option>
+          <option value="qwen/qwen3.8-27b">qwen/qwen3.8-27b (mais rápido)</option>
+          <option value="openai/gpt-oss-20b">openai/gpt-oss-20b</option>
+          <option value="allam-2-7b">allam-2-7b</option>
+        </select>
+        <button
+          onClick={save}
+          disabled={saving || loading}
+          className="flex items-center gap-2 bg-slate-800 hover:bg-slate-700 disabled:opacity-50 text-slate-100 text-sm px-4 py-2 rounded-lg border border-slate-700"
+        >
+          <Save size={15} />
+          Salvar modelo
+        </button>
+      </section>
+
       <section className="rounded-xl p-4 border border-slate-800 bg-slate-900/40">
         <h2 className="text-sm font-semibold text-slate-200 flex items-center gap-2 mb-2">
           <Smartphone size={16} className="text-emerald-400" />
