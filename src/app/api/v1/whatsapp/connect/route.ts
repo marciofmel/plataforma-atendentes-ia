@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSettings, saveSettings } from "@/lib/settings";
-import { resolveProvider } from "@/services/whatsapp";
+import { normalizeInstanceName, resolveProvider, validateHttpUrl } from "@/services/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -9,11 +9,15 @@ function trimBase(url: string): string {
 }
 
 async function evolutionStatus(settings: Record<string, string>) {
-  const baseUrl = trimBase(settings.evolution_base_url);
+  const check = validateHttpUrl(settings.evolution_base_url, "URL da Evolution API");
   const apiKey = settings.evolution_api_key?.trim();
-  const instance = settings.evolution_instance?.trim();
-  if (!baseUrl || !apiKey || !instance) {
-    return { connected: false, state: "not_configured", error: "Configure URL, API Key e instância." };
+  const instance = normalizeInstanceName(settings.evolution_instance);
+  if (!check.ok) {
+    return { connected: false, state: "invalid_config", error: check.error };
+  }
+  const baseUrl = check.url;
+  if (!apiKey || !instance) {
+    return { connected: false, state: "not_configured", error: "Configure a API Key e o nome da instância." };
   }
   try {
     const res = await fetch(`${baseUrl}/instance/connectionState/${encodeURIComponent(instance)}`, {
@@ -24,9 +28,17 @@ async function evolutionStatus(settings: Record<string, string>) {
     const state = data?.instance?.state ?? data?.state ?? (res.ok ? "unknown" : "error");
     return { connected: state === "open", state, detail: data };
   } catch (err) {
-    return { connected: false, state: "unreachable", error: err instanceof Error ? err.message : "Falha de rede" };
+    return {
+      connected: false,
+      state: "unreachable",
+      error:
+        err instanceof Error
+          ? `Não foi possível alcançar ${baseUrl}: ${err.message}`
+          : "Falha de rede ao alcançar a Evolution API.",
+    };
   }
 }
+
 
 async function zapiStatus(settings: Record<string, string>) {
   const baseUrl = trimBase(settings.zapi_base_url || "https://api.z-api.io");
@@ -122,12 +134,27 @@ export async function POST() {
   }
 
   // Evolution API
-  const baseUrl = trimBase(settings.evolution_base_url);
+  const urlCheck = validateHttpUrl(settings.evolution_base_url, "URL da Evolution API");
   const apiKey = settings.evolution_api_key?.trim();
-  const instance = settings.evolution_instance?.trim();
-  if (!baseUrl || !apiKey || !instance) {
-    return NextResponse.json({ error: "Preencha URL, API Key e nome da instância." }, { status: 400 });
+  const instance = normalizeInstanceName(settings.evolution_instance);
+
+  if (!urlCheck.ok) {
+    return NextResponse.json({ error: urlCheck.error }, { status: 400 });
   }
+  if (!apiKey) {
+    return NextResponse.json(
+      { error: "Informe a API Key global da Evolution API (AUTHENTICATION_API_KEY)." },
+      { status: 400 }
+    );
+  }
+  if (!instance || instance.length < 2) {
+    return NextResponse.json(
+      { error: "Informe um nome de instância válido (letras, números e hífen, sem espaços). Ex.: atendentes-ia." },
+      { status: 400 }
+    );
+  }
+
+  const baseUrl = urlCheck.url;
 
   try {
     // Cria a instância se ainda não existir (erro 403/409 = já existe, seguimos).
@@ -137,20 +164,38 @@ export async function POST() {
       body: JSON.stringify({ instanceName: instance, qrcode: true, integration: "WHATSAPP-BAILEYS" }),
     }).catch(() => null);
 
-    const res = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instance)}`, {
-      headers: { apikey: apiKey },
-      cache: "no-store",
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${baseUrl}/instance/connect/${encodeURIComponent(instance)}`, {
+        headers: { apikey: apiKey },
+        cache: "no-store",
+      });
+    } catch (netErr) {
+      return NextResponse.json(
+        {
+          error:
+            `Não foi possível alcançar ${baseUrl}. Confira se o servidor da Evolution API está no ar e se a URL está correta.`,
+          detail: netErr instanceof Error ? netErr.message : String(netErr),
+        },
+        { status: 502 }
+      );
+    }
     const data = await res.json().catch(() => ({}));
     const qr = data?.base64 ?? data?.qrcode?.base64 ?? data?.qr ?? null;
 
     if (!res.ok || !qr) {
-      const status = await evolutionStatus(settings);
+      const status = await evolutionStatus(settings as Record<string, string>);
       if (status.connected) {
         return NextResponse.json({ provider: "evolution", connected: true, message: "WhatsApp já conectado." });
       }
       return NextResponse.json(
-        { error: "Não foi possível obter o QR Code da Evolution API.", detail: data },
+        {
+          error:
+            res.status === 401 || res.status === 403
+              ? "A Evolution API recusou a autenticação. Confira a API Key global (AUTHENTICATION_API_KEY)."
+              : "Não foi possível obter o QR Code da Evolution API.",
+          detail: data,
+        },
         { status: 502 }
       );
     }
@@ -163,17 +208,21 @@ export async function POST() {
   }
 }
 
+
 export async function DELETE() {
   const settings = await getSettings();
   const provider = resolveProvider(settings);
 
   try {
     if (provider === "evolution") {
-      const baseUrl = trimBase(settings.evolution_base_url);
-      await fetch(`${baseUrl}/instance/logout/${encodeURIComponent(settings.evolution_instance)}`, {
-        method: "DELETE",
-        headers: { apikey: settings.evolution_api_key?.trim() ?? "" },
-      });
+      const check = validateHttpUrl(settings.evolution_base_url, "URL da Evolution API");
+      if (check.ok) {
+        const instance = normalizeInstanceName(settings.evolution_instance);
+        await fetch(`${check.url}/instance/logout/${encodeURIComponent(instance)}`, {
+          method: "DELETE",
+          headers: { apikey: settings.evolution_api_key?.trim() ?? "" },
+        });
+      }
     } else if (provider === "zapi") {
       const baseUrl = trimBase(settings.zapi_base_url || "https://api.z-api.io");
       const headers: Record<string, string> = { "Content-Type": "application/json" };

@@ -55,9 +55,9 @@ const FIELDS: Record<Provider, { key: string; label: string; placeholder: string
     { key: "meta_graph_version", label: "Versão da Graph API", placeholder: "v21.0", hint: "Opcional. Padrão: v21.0" },
   ],
   evolution: [
-    { key: "evolution_base_url", label: "URL da Evolution API", placeholder: "https://evolution.seudominio.com", hint: "Sem barra no final." },
+    { key: "evolution_base_url", label: "URL da Evolution API", placeholder: "https://evolution.seudominio.com", hint: "Endereço do servidor, começando com https://. Não é e-mail nem nome de usuário." },
     { key: "evolution_api_key", label: "API Key (AUTHENTICATION_API_KEY)", placeholder: "sua-chave-global", secret: true },
-    { key: "evolution_instance", label: "Nome da instância", placeholder: "atendentes-ia" },
+    { key: "evolution_instance", label: "Nome da instância", placeholder: "atendentes-ia", hint: "Sem espaços. Apenas letras, números e hífen." },
   ],
   zapi: [
     { key: "zapi_instance_id", label: "Instance ID", placeholder: "3A1B2C..." },
@@ -74,6 +74,44 @@ function normalizeQr(qr: string | null): string | null {
   return `data:image/png;base64,${qr}`;
 }
 
+const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+/** Validação local dos campos da Evolution API, para avisar antes de chamar o servidor. */
+function validateEvolution(s: Record<string, string>): Record<string, string> {
+  const errors: Record<string, string> = {};
+  const url = (s.evolution_base_url ?? "").trim();
+  if (!url) {
+    errors.evolution_base_url = "Informe a URL do seu servidor Evolution API.";
+  } else if (EMAIL_RE.test(url)) {
+    errors.evolution_base_url =
+      "Isso é um e-mail. Aqui vai o endereço do servidor, ex.: https://evolution.seudominio.com";
+  } else if (!/^https?:\/\//i.test(url)) {
+    errors.evolution_base_url = "A URL precisa começar com https:// (ou http://).";
+  } else {
+    try {
+      new URL(url);
+    } catch {
+      errors.evolution_base_url = "URL inválida. Exemplo correto: https://evolution.seudominio.com";
+    }
+  }
+
+  if (!(s.evolution_api_key ?? "").trim()) {
+    errors.evolution_api_key = "Informe a API Key global (AUTHENTICATION_API_KEY) do seu servidor.";
+  }
+
+  const inst = (s.evolution_instance ?? "").trim();
+  if (!inst) errors.evolution_instance = "Informe o nome da instância.";
+  else if (inst.length < 2) errors.evolution_instance = "Nome muito curto.";
+
+  return errors;
+}
+
+/** Mesma normalização do backend: sem espaços, minúsculas. */
+function normalizeInstance(raw: string): string {
+  return raw.trim().toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9._-]/g, "");
+}
+
+
 export default function WhatsAppPage() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [provider, setProvider] = useState<Provider>("evolution");
@@ -85,6 +123,7 @@ export default function WhatsAppPage() {
   const [testNumber, setTestNumber] = useState("");
   const [testing, setTesting] = useState(false);
   const [origin, setOrigin] = useState("");
+  const [errors, setErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setOrigin(window.location.origin);
@@ -155,6 +194,19 @@ export default function WhatsAppPage() {
   }
 
   async function connect() {
+    // Validação local: evita mandar lixo para a API e devolver erro técnico.
+    if (provider === "evolution") {
+      const errs = validateEvolution(settings);
+      setErrors(errs);
+      if (Object.keys(errs).length > 0) {
+        setFeedback({
+          kind: "err",
+          text: "Corrija os campos destacados em vermelho antes de conectar.",
+        });
+        return;
+      }
+    }
+
     await save(async () => {
       setQr(null);
       const res = await fetch("/api/v1/whatsapp/connect", { method: "POST" });
@@ -308,20 +360,57 @@ export default function WhatsAppPage() {
           </div>
         )}
         <div className="grid md:grid-cols-2 gap-3 mt-3">
-          {FIELDS[provider].map((f) => (
-            <div key={f.key}>
-              <label className="block text-xs font-medium text-slate-300 mb-1">{f.label}</label>
-              <input
-                type={f.secret ? "password" : "text"}
-                value={settings[f.key] ?? ""}
-                onChange={(e) => update(f.key, e.target.value)}
-                placeholder={f.placeholder}
-                className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:border-purple-500 focus:outline-none"
-              />
-              {f.hint && <p className="text-[10px] text-slate-500 mt-1">{f.hint}</p>}
-            </div>
-          ))}
+          {FIELDS[provider].map((f) => {
+            const err = errors[f.key];
+            return (
+              <div key={f.key}>
+                <label className="block text-xs font-medium text-slate-300 mb-1">{f.label}</label>
+                <input
+                  type={f.secret ? "password" : "text"}
+                  value={settings[f.key] ?? ""}
+                  onChange={(e) => {
+                    update(f.key, e.target.value);
+                    if (errors[f.key]) {
+                      setErrors((prev) => {
+                        const next = { ...prev };
+                        delete next[f.key];
+                        return next;
+                      });
+                    }
+                  }}
+                  onBlur={(e) => {
+                    if (f.key === "evolution_instance") {
+                      const normalized = normalizeInstance(e.target.value);
+                      if (normalized !== e.target.value) update(f.key, normalized);
+                    }
+                  }}
+                  placeholder={f.placeholder}
+                  className={`w-full bg-slate-900 border rounded-lg px-3 py-2 text-sm text-slate-200 placeholder-slate-500 focus:outline-none ${
+                    err ? "border-red-500/70 focus:border-red-400" : "border-slate-700 focus:border-purple-500"
+                  }`}
+                />
+                {err ? (
+                  <p className="text-[10px] text-red-400 mt-1 flex items-start gap-1">
+                    <AlertTriangle size={11} className="mt-0.5 shrink-0" />
+                    <span>{err}</span>
+                  </p>
+                ) : (
+                  f.hint && <p className="text-[10px] text-slate-500 mt-1">{f.hint}</p>
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        {provider === "evolution" && (
+          <div className="mt-3 rounded-lg border border-slate-800 bg-slate-950/60 p-3 text-[11px] text-slate-400 leading-relaxed">
+            <p className="text-slate-200 font-semibold mb-1">Ainda não tem um servidor Evolution API?</p>
+            A Evolution API não é um site que você se cadastra — ela precisa estar <strong>hospedada</strong> (VPS, Docker,
+            Railway, seu próprio servidor). Sem esse endereço não existe QR Code para gerar. Se preferir algo pronto,
+            escolha <strong>Z-API</strong> acima: você cria a instância no painel deles e copia Instance ID + Token.
+          </div>
+        )}
+
 
         <div className="flex flex-wrap gap-2 mt-4">
           <button

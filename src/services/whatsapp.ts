@@ -48,6 +48,64 @@ function trimBase(url: string): string {
   return url.trim().replace(/\/+$/, "");
 }
 
+/**
+ * Valida se o texto é realmente uma URL HTTP(S) utilizável.
+ * Evita o erro críptico "Failed to parse URL from <valor>" quando o usuário
+ * digita um e-mail ou o nome do servidor sem o protocolo.
+ */
+export function validateHttpUrl(
+  raw: string | null | undefined,
+  label = "URL da Evolution API"
+): { ok: boolean; url: string; error?: string } {
+  const value = trimBase(String(raw ?? ""));
+  if (!value) {
+    return { ok: false, url: "", error: `Informe a ${label} (ex.: https://evolution.seudominio.com).` };
+  }
+  if (/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) {
+    return {
+      ok: false,
+      url: value,
+      error: `"${value}" é um e-mail, não uma URL. A ${label} é o endereço do servidor, começando com https:// (ex.: https://evolution.seudominio.com).`,
+    };
+  }
+  if (!/^https?:\/\//i.test(value)) {
+    return {
+      ok: false,
+      url: value,
+      error: `A ${label} precisa começar com http:// ou https://. Recebido: "${value}".`,
+    };
+  }
+  try {
+    const parsed = new URL(value);
+    if (!parsed.hostname) {
+      return { ok: false, url: value, error: `URL sem domínio: "${value}".` };
+    }
+    if (!parsed.hostname.includes(".") && parsed.hostname !== "localhost") {
+      return {
+        ok: false,
+        url: value,
+        error: `Domínio incompleto em "${value}". Use o endereço completo, ex.: https://evolution.seudominio.com.`,
+      };
+    }
+    return { ok: true, url: value };
+  } catch {
+    return {
+      ok: false,
+      url: value,
+      error: `URL inválida: "${value}". Exemplo correto: https://evolution.seudominio.com`,
+    };
+  }
+}
+
+/** Nome de instância da Evolution API aceita apenas letras, números, ponto, hífen e underline. */
+export function normalizeInstanceName(raw: string | null | undefined): string {
+  return String(raw ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, "-")
+    .replace(/[^a-z0-9._-]/g, "");
+}
+
 async function sendViaMeta(settings: AppSettings, to: string, text: string): Promise<SendResult> {
   const phoneNumberId = settings.meta_whatsapp_phone_number_id?.trim();
   const token = settings.meta_whatsapp_token?.trim();
@@ -73,12 +131,16 @@ async function sendViaMeta(settings: AppSettings, to: string, text: string): Pro
 }
 
 async function sendViaEvolution(settings: AppSettings, to: string, text: string): Promise<SendResult> {
-  const baseUrl = trimBase(settings.evolution_base_url || "");
+  const check = validateHttpUrl(settings.evolution_base_url, "URL da Evolution API");
   const apiKey = settings.evolution_api_key?.trim();
-  const instance = settings.evolution_instance?.trim();
-  if (!baseUrl || !apiKey || !instance) {
-    return { ok: false, provider: "evolution", error: "URL, API Key ou instância da Evolution API não configuradas." };
+  const instance = normalizeInstanceName(settings.evolution_instance);
+  if (!check.ok) {
+    return { ok: false, provider: "evolution", error: check.error };
   }
+  if (!apiKey || !instance) {
+    return { ok: false, provider: "evolution", error: "API Key ou instância da Evolution API não configuradas." };
+  }
+  const baseUrl = check.url;
   const res = await fetch(`${baseUrl}/message/sendText/${encodeURIComponent(instance)}`, {
     method: "POST",
     headers: { apikey: apiKey, "Content-Type": "application/json" },
